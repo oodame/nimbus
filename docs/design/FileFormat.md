@@ -9,7 +9,7 @@
 
 - 纯列存。纯列存则是将表的所有行，按照列进行重新聚合，以列的维度来存储。对于某一列数据，仍然可以按照固定行数进行分组。这样，一行的数据那么就有可能分散在不同的文件中，好处是对于全表扫描某一列的纯分析类任务相对友好。业界采用这种存储方式的有Vertica，Greenplum等等。
 
-Nimbus的列存方案采用的是行列混存的模式，是由于其workload决定的：我们总是从一些点（vertex）出发，进行traverse（遍历点的出/入边），对边/对端点进行路径分析。因此，我们希望，一个点的出/入边能够尽量在一个文件中，这样遍历的效率最高。
+Nimbus的列存方案采用的是行列混存的模式，是由于其workload决定的：我们总是从一些点（vertex）出发，进行traverse（遍历点的出/入边），对边/端点进行路径分析。因此，我们希望，一个点的出/入边能够尽量在一个文件中，这样遍历的效率最高。
 
 另外，考虑到一个点的出/入边类型（type），所以参照关系型数据库中的方案，我们首先是确保一个点某种类型的出边/入边在一个EdgeGroup中。简单的方案就是，一个点的所有某个类型的出边，作为一个EdgeGroup。于是，我们有如下的EdgeGroup文件格式设计：
 
@@ -23,7 +23,7 @@ Nimbus的列存方案采用的是行列混存的模式，是由于其workload决
 | Null Bitmap | Property |  Property  |  Property  | Property  | \
 +-------------+----------+------------+------------+-----------+    Fixed Length Properties Section
 |                           ...                    |   Footer  | /
-+-------------+--------+--------+--------+---------------------+
++-------------+--------+--------+--------+---------+-----------+
 | NUll Bitmap | Offset | Offset | Offset |       ...           | \
 +-------------+--------+--------+--------+---------------------+   \
 |                 |         |       |             ...          |     \              
@@ -35,15 +35,7 @@ Nimbus的列存方案采用的是行列混存的模式，是由于其workload决
 |                                                              |
 +--------------------------------------------------------------+
 ```
-在EdgeGroup中，数据又分成了若干sections：outgoing edges, fixed length properties, variable length properties。抽象地来描述section，可以分为这么几个部分：null bitmap(optional for outgoing/incoming edges)，value array，和footer(optional for outgoing/incoming edges)。
-```text
-Compressed Section
-+-------------+-------------+--------+
-| Null bitmap | Value array | Footer |
-+-------------+-------------+--------+
-```
-
-其中，各字段的意思如下
+在EdgeGroup中，数据又分成了若干sections：outgoing edges, fixed length properties, variable length properties。其中，各字段的意思如下
 
 ```text
 +-------------+--------------------+------------------------------------------------------+
@@ -77,31 +69,24 @@ Compressed Section
 +-------------+--------------------+------------------------------------------------------+
 ```
 
-
-
-
-宏观上，
+宏观上，一组EdgeGroup组成了一个segment file。如何组织segment中的EdgeGroup？不同的方式，产生了不同的方案。
 
 ```text
-Segment File
-+-----------+
-| EdgeGroup |
-+-----------+
-| EdgeGroup |
-+-----------+
-| EdgeGroup |
-+-----------+
+                              Compressed Section
+                    +-------------+-------------+--------+
+                  / | Null bitmap | Value array | Footer |
+ Segment File   /   +-------------+-------------+--------+
++-----------+ /     +-------------+-------------+--------+
+| EdgeGroup |       | Null bitmap | Value array | Footer |
++-----------+ \     +-------------+-------------+--------+
+| EdgeGroup |   \                   ....
++-----------+     \ +-------------+-------------+--------+
+| EdgeGroup |       | Null bitmap | Value array | Footer |
++-----------+       +-------------+-------------+--------+
 |    ...    |
 +-----------+
 | EdgeGroup |
 +-----------+
-```
-
-```text
-EdgeGroup Description Table
-+---------------------+-------+----
-| VertexId | EdgeType | SegNo | EdgeGroup
-+
 ```
 
 - 方案一
@@ -119,7 +104,68 @@ V          +----------------+
 
 ```
 
-方案二
+对于某个点的出边来说（入边类似），按照其type，分布在不同的segment file中。简单起见，假如某个type的边都存在一个segment file中，V的出边共有EdgeType(1-N)，那么其出边将存在于segment file(1-N)中。
+
+对于含有m个property的edge type来说，一个EdgeGroup的desc table如下所示
+```text
+EdgeGroup Description Table
++--------------+-----------+---------+-------+------------+
+| ColumnId(-1) |  EdgeNum  | StartTs | EndTs | FileOffset |     
++--------------+-----------+---------+-------+------------+
+| ColumnId(0)  |  SecInfo  |           Stats              |
++--------------+-----------+------------------------------+
+| ColumnId(1)  |  SecInfo  |           Stats              |
++--------------+-----------+------------------------------+
+|                         ...                             |
+|                                                         |
++--------------+-----------+------------------------------+
+| Column(m)    |  SecInfo  |           Stats              |
++--------------+-----------+------------------------------+
+```
+
+其中，各字段代表的意义如下
+
+```text
++------------+-------------+---------------------------------------------------------+
+|   Field    | Size(Bytes) |                           Desc                          |
++------------+-------------+---------------------------------------------------------+
+| ColumnId   |     4       | Id of a column; negtive columns stands for special ones |
++------------+-------------+---------------------------------------------------------+
+| EdgeNum    |     4       | Total number of edges in this group                     |
++------------+-------------+---------------------------------------------------------+
+| StartTs    |     8       | Minimum timestmap in this group                         |
++------------+-------------+---------------------------------------------------------+
+| EndTs      |     8       | Maximum timestamp in this group                         |
++------------+-------------+---------------------------------------------------------+
+| FileOffset |     8       | Offset of this group in segment file                    |
++------------+-------------+---------------------------------------------------------+
+```
+
+
+
+```text
+SecInfo
++---------+-------+--------------------+--------------------+------------------+-------------------+----------+
+| Version | Flags | Null bitmap offset | Value array offset | Value array size | Uncompressed size | Checksum |
++---------+-------+--------------------+--------------------+------------------+-------------------+----------+
+```
+
+
+
+
+
+```text
+EdgeGroup Description Table
++----------+-----------+-------+---------------+------------------------+
+| VertexId | EdgeType1 | SegNo | EdgeGroup Num | EdgeGroup Offset Array |
++----------+-----------+-------+---------------+------------------------+
+```
+
+
+
+
+
+- 方案二
 
 ```text
                                    EdgeType 1
@@ -143,3 +189,9 @@ V ---->    | Segment File 1 |
 - [ ] Null bit map
 - [ ] Compression algorithm mark
 - [ ] What if I store the data of all vertices in all machines?
+
+### References
+---
+[1] KeyStone
+[2] ClickHouse
+[3] TiDB & TiFlash
