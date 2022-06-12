@@ -3,7 +3,7 @@ Nimbus是一款面向OLAP的列存图数据库，旨在提供快速的图遍历�
 
 ## Design
 
-设计思路上，和TiDB类似，我们复用已有的OLTP图数据库，新增的OLAP数据库作为单独的Replica，读靠Optimizer分发plan到适合的Replica中；写靠Raft进行同步。
+设计思路上，和TiDB类似，我们复用已有的OLTP图数据库，新增的OLAP数据库作为单独的Replica，读靠Optimizer分发plan到适合的Replica；写靠Raft进行同步。
 
 总体设计如下
 
