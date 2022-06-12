@@ -35,7 +35,9 @@ V -> |   V3   |  -->  | Out/In Edge | ------> | SegInfo |        | EdgeGroup Des
                                    MetaInfo Table                                                                         Data Table
 ```
 
-以上是边数据的文件设计，大体包含两个部分：MetaInfo Table和Data Table。DataTable存储了边的属性信息；而在这之上构建了多层的MetaInfo Table，用于快速地查找某个点的出/入边。我们先从最下面存储属性数据的EdgeGroup开始。
+以上是边数据的文件设计，大体包含两个部分：MetaInfo Table和Data Table。DataTable存储了边的属性信息；而在这之上构建了多层的MetaInfo Table，用于快速地查找某个点的出/入边。点边的数据存储和索引类似，所以我们这里只探讨了Edge File的设计。
+
+我们先从最下面存储属性数据的EdgeGroup开始。
 
 #### EdgeGroup File
 
