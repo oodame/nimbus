@@ -1,4 +1,4 @@
-# NimbusGraph
+# Nimbus Graph
 
 An exploration on OLAP graph database.
 
