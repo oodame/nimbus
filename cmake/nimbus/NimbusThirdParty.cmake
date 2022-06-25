@@ -2,6 +2,28 @@ include(ExternalProject)
 include(FetchContent)
 include(NimbusThirdPartyVersions)
 
+set(NimbusSubProjects 
+    openssl
+    xz
+    lz4
+    lzma
+    snappy
+    zlib
+    libtool
+    double-conversion
+    libevent
+    gflags
+    glog
+    boost
+    folly
+)
+
+macro(find_package)
+    if (NOT "${ARG0}" IN_LIST NimbusSubProjects)
+        _find_package(${ARGV})
+    endif()
+endmacro()
+
 # folly
 FetchContent_Declare(
     folly 
@@ -36,9 +58,9 @@ FetchContent_Declare(
 
 # zlib
 FetchContent_Declare(
-   zlib
-   GIT_REPOSITORY    https://github.com/madler/zlib.git
-   GIT_TAG           21767c654d31d2dccdde4330529775c6c5fd5389 # v1.2.12 
+    zlib
+    GIT_REPOSITORY    https://github.com/madler/zlib.git
+    GIT_TAG           21767c654d31d2dccdde4330529775c6c5fd5389 # v1.2.12 
 #    FIND_PACKAGE_ARGS NAMES z
 )
 
@@ -111,8 +133,8 @@ FetchContent_Declare(
 
 # boost 
 FetchContent_Declare(
-    glog
-    GIT_REPOSITORY    https://github.com/google/glog.git
+    boost
+    GIT_REPOSITORY    https://github.com/boostorg/boost.git 
     GIT_TAG           5df8086b733798c8e08e316626a16babe11bd0d2 # v1.79.0 
     # FIND_PACKAGE_ARGS NAMES boost 
 )
