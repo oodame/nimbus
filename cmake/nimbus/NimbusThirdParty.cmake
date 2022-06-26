@@ -16,6 +16,7 @@ set(NimbusSubProjects
     glog
     boost
     folly
+    googletest
 )
 
 macro(find_package)
@@ -84,8 +85,9 @@ FetchContent_Declare(
 # openssl 
 FetchContent_Declare(
     openssl
-    GIT_REPOSITORY    https://github.com/openssl/openssl.git
-    GIT_TAG           4d346a188c27bdf78aa76590c641e1217732ca4b # v3.0.3 
+    # GIT_REPOSITORY    git@github.com:openssl/openssl.git 
+    # GIT_TAG           4d346a188c27bdf78aa76590c641e1217732ca4b # v3.0.3 
+    URL               https://github.com/openssl/openssl/archive/refs/tags/openssl-3.0.4.tar.gz
     # FIND_PACKAGE_ARGS NAMES openssl 
 )
 
@@ -116,10 +118,11 @@ FetchContent_Declare(
 # libevent 
 FetchContent_Declare(
     libevent
-    GIT_REPOSITORY    https://github.com/libevent/libevent.git 
-    GIT_TAG           5df3037d10556bfcb675bc73e516978b75fc7bc7 # v2.1.12 
-    COMMENT           v2.1.12
-    DEPENDS           openssl
+    # GIT_REPOSITORY    https://github.com/libevent/libevent.git 
+    # GIT_TAG           5df3037d10556bfcb675bc73e516978b75fc7bc7 # v2.1.12 
+    URL               https://github.com/libevent/libevent/archive/refs/tags/release-2.1.12-stable.tar.gz
+    # COMMENT           v2.1.12
+    # DEPENDS           openssl
     # FIND_PACKAGE_ARGS NAMES libevent 
 )
 
@@ -157,6 +160,7 @@ FetchContent_MakeAvailable(
 #
 # Dependency order is from high to low.
 FetchContent_MakeAvailable(
+    googletest
     openssl
     xz
     lz4
