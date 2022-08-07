@@ -1,9 +1,9 @@
 /**
- * Copyright (c) 2022-2022, all rights reserved by the BlazingNimbus Group.
+ * Copyright (c) 2022-present, all rights reserved by the BlazingNimbus Group.
  *
  * Create on 26/06/2022
  * Author:
- *        Yaochi oodame@outlook.com
+ *        Yaochi <oodame@outlook.com>
  */
 
 #ifndef OCCAMY_SFILE_EDGEGROUP_H_
