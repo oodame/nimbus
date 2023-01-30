@@ -1,9 +1,12 @@
-cmake_minimum_required(VERSION 3.23)
+cmake_minimum_required(VERSION 3.23 FATAL_ERROR)
 
 project(NimbusGraph 
     VERSION       0.0.1
-    DESCRIPTION   "An exploration on OLAP graph database."
-    LANGUAGES     CXX)
+    DESCRIPTION   "An Exploration on OLAP Graph Database."
+    LANGUAGES     C CXX)
+
+set_property(DIRECTORY PROPERTY EP_BASE ${CMAKE_BINARY_DIR}/subprojects)
+set()
 
 #-----------------------------------------------------
 # enable testing BUILD_TESTING configure

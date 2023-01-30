@@ -36,3 +36,4 @@ _build/*
 build/*
 .build/*
 .vscode/*
+third_party/*

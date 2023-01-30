@@ -33,7 +33,7 @@ public:
     // 10/11: some are null while some are not;
     // for the first two cases, we do NOT store the null bitmap 
     // for space efficiency.
-    bool hasNullMap() const { return footer_ & 0x10 == 0x10; }
+    bool hasNullMap() const { return (footer_ & 0x10) == 0x10; }
 
 
 
