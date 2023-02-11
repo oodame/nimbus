@@ -1,2 +1,0 @@
-add_executable(nimbus_service NimbusService.cpp)
-target_link_libraries(nimbus_service)

@@ -37,3 +37,5 @@ build/*
 .build/*
 .vscode/*
 third_party/*
+zig-cache/*
+zig-out/*
