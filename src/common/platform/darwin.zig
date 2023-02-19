@@ -1,12 +1,16 @@
 const std = @import("std");
-const builtin = @import("builtin");
+const os = std.os;
 
-pub const platform = builtin.target.os.tag;
+const ReadError = @import("../error_code.zig").ReadError;
+const Slice = @import("../types/types.zig").Slice;
 
-const assert = std.debug.assert;
+pub const FileReader = struct {
+    file_name: Slice,
+    fd: os.fd_t, 
 
-test "darwin" {
-    comptime {
-        assert(platform == .macos);
+    const Self = @This();
+
+    pub fn read(self: Self, buf: []u8, len: u32, offset: u64) !usize {
+        return os.pread(self.fd, buf, len, offset);
     }
-}
+};
