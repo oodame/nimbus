@@ -12,6 +12,12 @@ const NodeStatusFlag = packed struct(u64) {
     INSERTING: bool = false,
 };
 
+const InsertStatus = enum {
+    FULL,
+    SUCCESS,
+    DUPLICATE,
+};
+
 const BTreeNode = struct {
 
 };
@@ -33,19 +39,19 @@ const LeafNode = struct {
 /// Returns an internal node.
 fn InternalNodeType(key_size: u32, comptime fanout: u32) type {
     return struct {
-        // Exports Key type
         var keys: [fanout]Slice = undefined;
         var child_ptrs: [fanout]*BTreeNode = undefined;
         var child_num: u32 = 0;
         const buf: Slice = undefined;
 
         const Self = @This();
-        const Key = [key_size]u8;
+        // Exports Key type
+        pub const Key = [key_size]u8;
 
         pub fn init(allocator: *std.mem.Allocator, split_key: Key, lchild: *BTreeNode, rchild: *BTreeNode) !Self {
             buf = try allocator.alignedAlloc(u8, key_size * fanout);
             std.mem.copy(u8, buf, split_key);
-            keys[0] = buf[0..];
+            keys[0] = buf[0..key_size];
             child_ptrs[0] = lchild;
             child_ptrs[1] = rchild;
             child_num = 2;
@@ -54,7 +60,39 @@ fn InternalNodeType(key_size: u32, comptime fanout: u32) type {
         pub fn deinit(self: *Self, allocator: *std.mem.Allocator) void {
             allocator.free(self.buf);
         }
+
+        pub fn insert(key: Key, rchild: *BTreeNode, allocator: *std.mem.Allocator) InsertStatus {
+            if (child_num == fanout) {
+                return InsertStatus.FULL;
+            }
+
+        }
     };
+}
+
+/// Find the key in an array of keys which is not smaller than the provided `key`
+/// Returns the index in the array if found one;
+/// Otherwise returns keys.size() if all keys are smaller than `key`
+/// exact means if the founded index incates a exactly equalness.
+fn findInSliceArray(keys: []Slice, key: Slice, exact: *bool) usize {
+    if (keys.len == 0) {
+        exact = false;
+        return 0;
+    }
+    var left = 0;
+    var right = keys.len;
+    while (left < right) {
+        const mid = (left + right) / 2;
+        if (!std.mem.lessThan(Slice, keys[mid], key)) {  // mid >= key
+            right = mid;
+        } else {  // mid < key
+            left = mid + 1;    
+        }
+    }
+    if (right < keys.len and std.mem.eql(Slice, keys[right], key)) {
+        exact = true;
+    }    
+    return right;
 }
 
 /// 
