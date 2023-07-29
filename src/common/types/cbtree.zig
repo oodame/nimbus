@@ -74,7 +74,7 @@ fn InternalNodeType(key_size: u32, comptime fanout: u32) type {
 /// Returns the index in the array if found one;
 /// Otherwise returns keys.size() if all keys are smaller than `key`
 /// exact means if the founded index incates a exactly equalness.
-fn findInSliceArray(keys: []Slice, key: Slice, exact: *bool) usize {
+fn find_in_slice_array(keys: []Slice, key: Slice, exact: *bool) usize {
     if (keys.len == 0) {
         exact = false;
         return 0;
@@ -147,16 +147,16 @@ pub fn ConcurrentBTreeType(
 
         }
 
-        fn prepareBatch(self: *Self, batch: *MutateBatch) void {
+        fn prepare_to_batch(self: *Self, batch: *MutateBatch) void {
 
         }
 
-        fn traverseToLeaf(self: *Self, key: Slice) *NodeType {
+        fn traverse_to_root(self: *Self, key: Slice) *NodeType {
             var node = stableRoot(self);
 
         }
 
-        fn stableRoot(self: *Self) *NodeType {
+        fn stable_root(self: *Self) *NodeType {
             var node = self.root;
             return blk: while (node.*.father) : (node = node.*.father) {
                 break :blk node;

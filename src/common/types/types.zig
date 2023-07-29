@@ -1,5 +1,5 @@
 const std = @import("std");
-const ErrorCode = @import("../ErrorCode.zig").ErrorCode;
+const ErrorCode = @import("../error_code.zig").ErrorCode;
 
 /// A string view of a const bytes.
 pub const Slice = []const u8;
