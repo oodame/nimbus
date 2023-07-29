@@ -18,23 +18,19 @@ const InsertStatus = enum {
     DUPLICATE,
 };
 
-const BTreeNode = struct {
-
-};
+const BTreeNode = struct {};
 
 /// An `LeafNode` with a fanout of N.
 /// +------------+------------+-----+----------------+--------------+
 /// | key0, ptr0 | key1, ptr1 | ... | keyN-1, ptrN-1 | keyN-1, ptrN |
 /// +------------+------------+-----+----------------+--------------+
-/// le(key0) |   gt(key0) |          gt(keyN-2)  |   gt(keyN-1) | 
+/// le(key0) |   gt(key0) |          gt(keyN-2)  |   gt(keyN-1) |
 ///          v   le(key1) v          le(keyN-1)  v              v
 ///      +-------+    +-------+              +---------+    +-------+
 ///      | page0 |    | page1 |    ...       | pageN-1 |    | pageN |
 ///      +-------+    +-------+              +---------+    +-------+
 ///
-const LeafNode = struct {
-
-};
+const LeafNode = struct {};
 
 /// Returns an internal node.
 fn InternalNodeType(key_size: u32, comptime fanout: u32) type {
@@ -65,7 +61,6 @@ fn InternalNodeType(key_size: u32, comptime fanout: u32) type {
             if (child_num == fanout) {
                 return InsertStatus.FULL;
             }
-
         }
     };
 }
@@ -83,39 +78,29 @@ fn find_in_slice_array(keys: []Slice, key: Slice, exact: *bool) usize {
     var right = keys.len;
     while (left < right) {
         const mid = (left + right) / 2;
-        if (!std.mem.lessThan(Slice, keys[mid], key)) {  // mid >= key
+        if (!std.mem.lessThan(Slice, keys[mid], key)) { // mid >= key
             right = mid;
-        } else {  // mid < key
-            left = mid + 1;    
+        } else { // mid < key
+            left = mid + 1;
         }
     }
     if (right < keys.len and std.mem.eql(Slice, keys[right], key)) {
         exact = true;
-    }    
+    }
     return right;
 }
 
-/// 
+///
 const InternalNode = struct {
     allocator: *std.mem.Allocator,
 
     const Self = @This();
 
-    pub fn init(allocator: *std.mem.Allocator, split_key: Slice, lchild: *BTreeNode, rchild: *BTreeNode) Self {
-
-    }
+    pub fn init(allocator: *std.mem.Allocator, split_key: Slice, lchild: *BTreeNode, rchild: *BTreeNode) Self {}
 };
 
 fn BTreeNodeType() type {
-    return union(enum) {
-        internal: struct {
-
-        },
-        leaf: struct {
-
-        }
-    };
-
+    return union(enum) { internal: struct {}, leaf: struct {} };
 
     return struct {
         const Self = @This();
@@ -132,28 +117,19 @@ pub fn ConcurrentBTreeType(
     return struct {
         root: *NodeType,
 
-
         const Self = @This();
 
-
-        const MutateBatch = struct {
-
-        };
+        const MutateBatch = struct {};
 
         /// Insert an entry into the tree.
-        /// 
+        ///
         /// Returns true if insert successfully, false if an entry with the given key already exists.
-        pub fn insert(self: *Self, key: Slice, value: Slice) bool {
+        pub fn insert(self: *Self, key: Slice, value: Slice) bool {}
 
-        }
-
-        fn prepare_to_batch(self: *Self, batch: *MutateBatch) void {
-
-        }
+        fn prepare_to_batch(self: *Self, batch: *MutateBatch) void {}
 
         fn traverse_to_root(self: *Self, key: Slice) *NodeType {
             var node = stableRoot(self);
-
         }
 
         fn stable_root(self: *Self) *NodeType {
@@ -162,6 +138,5 @@ pub fn ConcurrentBTreeType(
                 break :blk node;
             };
         }
-
     };
 }

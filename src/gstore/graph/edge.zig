@@ -13,16 +13,15 @@ pub const Edge = struct {
     dst: []const u8,
 
     pub fn init(src: []const u8, kind: u32, rank: u64, dst: []const u8) Edge {
-        return Edge {
+        return Edge{
             .src = src,
             .kind = kind,
             .rank = rank,
             .dst = dst,
-        };        
+        };
     }
 
     /// Compares two edges
-    pub fn compare(self: *Edge, other: *Edge) math.Order {
-
-    }
+    pub fn compare(self: *Edge, other: *Edge) math.Order {}
 };
+
