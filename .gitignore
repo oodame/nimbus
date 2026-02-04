@@ -39,3 +39,4 @@ build/*
 third_party/*
 zig-cache/*
 zig-out/*
+.zig-cache/*
