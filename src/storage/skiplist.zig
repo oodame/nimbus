@@ -624,3 +624,159 @@ test "SkipList: reverse iterator with single element" {
     rit.seek(41);
     try testing.expect(rit.node == null);
 }
+
+const Thread = std.Thread;
+
+test "SkipList: Single-Writer Multiple-Readers (SWMR) Get" {
+    const allocator = testing.allocator;
+    const ListType = SkipList(u32, u32);
+
+    const list = try allocator.create(ListType);
+    list.* = try ListType.init(allocator, &struct {
+        fn cmp(a: u32, b: u32) std.math.Order {
+            return std.math.order(a, b);
+        }
+    }.cmp);
+    defer {
+        list.deinit();
+        allocator.destroy(list);
+    }
+
+    const num_items = 2000;
+    const stop_flag = try allocator.create(std.atomic.Value(bool));
+    stop_flag.* = std.atomic.Value(bool).init(false);
+    defer allocator.destroy(stop_flag);
+
+    // 启动多个读者线程
+    const reader_count = 4;
+    var readers = try allocator.alloc(Thread, reader_count);
+    defer allocator.free(readers);
+
+    const reader_fn = struct {
+        fn run(l: *ListType, stop: *std.atomic.Value(bool)) void {
+            var i: u32 = 0;
+            while (!stop.load(.unordered)) {
+                // 尝试读取已经插入或者可能正在插入的 Key
+                const val = l.get(i % num_items);
+                if (val) |v| {
+                    // 如果读到了，验证数据一致性（Value 必须等于 Key）
+                    std.debug.assert(v == (i % num_items));
+                }
+                i += 1;
+            }
+        }
+    }.run;
+
+    for (0..reader_count) |i| {
+        readers[i] = try Thread.spawn(.{}, reader_fn, .{ list, stop_flag });
+    }
+
+    // 主线程作为唯一的写者
+    for (0..num_items) |i| {
+        try list.put(@intCast(i), @intCast(i));
+        // 模拟一点写入间隔
+        if (i % 100 == 0) std.Thread.sleep(1 * std.time.ns_per_ms);
+    }
+
+    // 停止读者
+    stop_flag.store(true, .unordered);
+    for (readers) |r| r.join();
+}
+
+test "SkipList: SWMR Iterator Consistency" {
+    const allocator = testing.allocator;
+    const ListType = SkipList(i32, i32);
+
+    const list = try allocator.create(ListType);
+    list.* = try ListType.init(allocator, &struct {
+        fn cmp(a: i32, b: i32) std.math.Order {
+            return std.math.order(a, b);
+        }
+    }.cmp);
+    defer {
+        list.deinit();
+        allocator.destroy(list);
+    }
+
+    const stop_flag = try allocator.create(std.atomic.Value(bool));
+    stop_flag.* = std.atomic.Value(bool).init(false);
+    defer allocator.destroy(stop_flag);
+
+    // 读者线程：不断进行全表扫描，确保扫描过程中链表不会断裂且 Key 始终有序
+    const scanner_fn = struct {
+        fn run(l: *ListType, stop: *std.atomic.Value(bool)) void {
+            while (!stop.load(.unordered)) {
+                var it = l.iterator();
+                var last_key: i32 = -1;
+                while (it.next()) |node| {
+                    // 核心校验：跳表遍历过程中 Key 必须是严格单调递增的
+                    std.debug.assert(node.key > last_key);
+                    last_key = node.key;
+                }
+            }
+        }
+    }.run;
+
+    const reader = try Thread.spawn(.{}, scanner_fn, .{ list, stop_flag });
+
+    // 写者：插入大量数据引发层级变动
+    var i: i32 = 0;
+    while (i < 1000) : (i += 1) {
+        try list.put(i, i);
+    }
+
+    stop_flag.store(true, .unordered);
+    reader.join();
+}
+
+test "SkipList: SWMR Concurrent Seek and ReverseIterator" {
+    const allocator = testing.allocator;
+    const ListType = SkipList(i32, i32);
+
+    const list = try allocator.create(ListType);
+    list.* = try ListType.init(allocator, &struct {
+        fn cmp(a: i32, b: i32) std.math.Order {
+            return std.math.order(a, b);
+        }
+    }.cmp);
+    defer {
+        list.deinit();
+        allocator.destroy(list);
+    }
+
+    // 先插入一部分基础数据
+    var i: i32 = 0;
+    while (i < 1000) : (i += 2) {
+        try list.put(i, i);
+    }
+
+    const stop_flag = try allocator.create(std.atomic.Value(bool));
+    stop_flag.* = std.atomic.Value(bool).init(false);
+    defer allocator.destroy(stop_flag);
+
+    // 反向迭代器读者：在写入发生时，确保反向查询的逻辑正确
+    const rev_scanner_fn = struct {
+        fn run(l: *ListType, stop: *std.atomic.Value(bool)) void {
+            while (!stop.load(.unordered)) {
+                var rit = l.reverseIterator();
+                rit.seek(500); // 定位到 <= 500 的位置
+                var last_key: i32 = 501;
+                while (rit.next()) |node| {
+                    std.debug.assert(node.key < last_key);
+                    last_key = node.key;
+                }
+            }
+        }
+    }.run;
+
+    const reader = try Thread.spawn(.{}, rev_scanner_fn, .{ list, stop_flag });
+
+    // 写者：插入奇数 Key，补齐 1-1000
+    i = 1;
+    while (i < 1000) : (i += 2) {
+        try list.put(i, i);
+    }
+
+    stop_flag.store(true, .unordered);
+    reader.join();
+}
