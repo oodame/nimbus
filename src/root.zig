@@ -3,6 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const skiplist = @import("storage/skiplist.zig");
 pub const SkipList = skiplist.SkipList;
+pub const WalManager = @import("storage/wal.zig").WalManager;
 
 pub fn bufferedPrint() !void {
     // Stdout is for the actual output of your application, for example if you
@@ -24,11 +25,6 @@ pub fn add(a: i32, b: i32) i32 {
 test "basic add functionality" {
     try std.testing.expect(add(3, 7) == 10);
 }
-
-pub const Dir = enum {
-    out,
-    in,
-};
 
 // block
 pub const BlockBuilder = struct {

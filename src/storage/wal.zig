@@ -12,6 +12,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const fs = std.fs;
+const Dir = @import("types.zig").Dir;
 
 // Magic number for WAL files
 const WAL_MAGIC: [4]u8 = "WAL\x00".*;
@@ -156,7 +157,7 @@ const WalRecord = struct {
 
         // Write header
         buf[0] = @intFromEnum(self.record_type);
-        std.mem.writeInt(u32, buf[1..5], @intCast(u32, self.payload.len), .little);
+        std.mem.writeInt(u32, buf[1..5], @intCast(self.payload.len), .little);
         std.mem.writeInt(u64, buf[5..13], self.lsn, .little);
         std.mem.writeInt(u64, buf[13..21], self.timestamp, .little);
 
@@ -319,6 +320,7 @@ const WalWriter = struct {
 
         const lsn = self.next_lsn;
 
+        // TODO: we copied payload twice here
         const record = try WalRecord.init(self.allocator, record_type, lsn, payload);
         errdefer record.deinit();
 
@@ -354,7 +356,169 @@ const WalManager = struct {
         self.writer.deinit();
     }
 
+    /// Format: [op_type:u8][vertex_id_len:u32][vertex_id][props_len:u32][props?]
     fn logPutVertex(self: *WalManager, vertex_id: []const u8, properties: ?[]const u8) !u64 {
-        
+        const vertex_len = vertex_id.len;
+        const props_len = if (properties) |props| props.len else 0;
+        const total_len = @sizeOf(u8) + @sizeOf(u32) + vertex_id.len + @sizeOf(u32) + props_len;
+
+        var buf = try self.allocator.alloc(u8, total_len);
+        defer self.allocator.free(buf);
+
+        var pos: usize = 0;
+
+        // Write op type
+        buf[pos] = @intFromEnum(LogOpType.put_vertex);
+        pos += 1;
+
+        // Write vertex_id len and data
+        std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(vertex_len), .little);
+        pos += @sizeOf(u32);
+        @memmove(buf[pos..][0..vertex_len], vertex_id);
+        pos += vertex_len;
+
+        // Write properties len
+        // A 0 means no properties
+        std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(props_len), .little);
+        pos += @sizeOf(u32);
+        if (properties) |props| {
+            @memmove(buf[pos..][0..props_len], props);
+            pos += props_len;
+        }
+        std.debug.assert(pos == total_len);
+
+        return self.writer.append(.full, buf);
+    }
+
+    /// Format: [op_type:u8][vertex_id_len:u32][vertex_id]
+    fn logDeleteVertex(self: *WalManager, vertex_id: []const u8) !u64 {
+        const total_len = @sizeOf(u8) + @sizeOf(u32) + vertex_id.len;
+
+        var buf = try self.allocator.alloc(u8, total_len);
+        defer self.allocator.free(buf);
+
+        var pos: usize = 0;
+
+        // Write op type
+        buf[pos] = @intFromEnum(LogOpType.delete_vertex);
+        pos += 1;
+
+        // Write vertex_id len and data
+        const vertex_len = vertex_id.len;
+        std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(vertex_len), .little);
+        pos += @sizeOf(u32);
+        @memmove(buf[pos..][0..vertex_len], vertex_id);
+        pos += vertex_len;
+        std.debug.assert(pos == total_len);
+
+        return self.writer.append(.full, buf);
+    }
+
+    /// Format: [op_type:u8][src_len:u32][src][dir:u8][label_len:u32][label][dst_len:u32][dst][props_len:u32][props?]
+    fn logPutEdge(
+        self: *WalManager,
+        src: []const u8,
+        dir: Dir,
+        label: []const u8,
+        dst: []const u8,
+        properties: ?[]const u8,
+    ) !u64 {
+        const props_len = if (properties) |props| props.len else 0;
+        const total_len = @sizeOf(u8) + @sizeOf(u32) + src.len + @sizeOf(Dir) + @sizeOf(u32) + label.len + @sizeOf(u32) + dst.len + @sizeOf(u32) + props_len;
+
+        var buf = self.allocator.alloc(u8, total_len);
+        defer self.allocator.free(buf);
+
+        var pos: usize = 0;
+
+        // Write op type
+        buf[pos] = @intFromEnum(LogOpType.put_edge);
+        pos += 1;
+
+        // Write src len and data
+        const src_len = src.len;
+        std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(src_len), .little);
+        pos += @sizeOf(32);
+        @memmove(buf[pos..][0..src_len], src);
+        pos += src_len;
+
+        // Write dir
+        buf[pos] = @intFromEnum(dir);
+        pos += 1;
+
+        // Write label len and data
+        const label_len = label.len;
+        std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(label_len), .little);
+        pos += @sizeOf(u32);
+        @memmove(buf[pos..][0..label_len], label);
+        pos += label_len;
+
+        // Write dst len and data
+        const dst_len = dst.len;
+        std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(dst_len), .little);
+        pos += @sizeOf(u32);
+        @memmove(buf[pos..][0..dst_len], dst);
+        pos += dst_len;
+
+        // Write properties len
+        // A 0 means no properties
+        std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(props_len), .little);
+        pos += @sizeOf(u32);
+        if (properties) |props| {
+            @memmove(buf[pos..][0..props_len], props);
+            pos += props_len;
+        }
+        std.debug.assert(pos == total_len);
+
+        return self.writer.append(.full, buf);
+    }
+
+    /// Format: [op_type:u8][src_len:u32][src][dir:u8][label_len:u32][label][dst_len:u32][dst]
+    fn logDeleteEdge(
+        self: *WalManager,
+        src: []const u8,
+        dir: Dir,
+        label: []const u8,
+        dst: []const u8,
+    ) !u64 {
+        const total_len = @sizeOf(u8) + @sizeOf(u32) + src.len + @sizeOf(Dir) + @sizeOf(u32) + label.len + @sizeOf(u32) + dst.len;
+
+        var buf = self.allocator.alloc(u8, total_len);
+        defer self.allocator.free(buf);
+
+        var pos: usize = 0;
+
+        // Write op type
+        buf[pos] = @intFromEnum(LogOpType.put_edge);
+        pos += 1;
+
+        // Write src len and data
+        const src_len = src.len;
+        std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(src_len), .little);
+        pos += @sizeOf(32);
+        @memmove(buf[pos..][0..src_len], src);
+        pos += src_len;
+
+        // Write dir
+        buf[pos] = @intFromEnum(dir);
+        pos += 1;
+
+        // Write label len and data
+        const label_len = label.len;
+        std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(label_len), .little);
+        pos += @sizeOf(u32);
+        @memmove(buf[pos..][0..label_len], label);
+        pos += label_len;
+
+        // Write dst len and data
+        const dst_len = dst.len;
+        std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(dst_len), .little);
+        pos += @sizeOf(u32);
+        @memmove(buf[pos..][0..dst_len], dst);
+        pos += dst_len;
+
+        std.debug.assert(pos == total_len);
+
+        return self.writer.append(.full, buf);
     }
 };
