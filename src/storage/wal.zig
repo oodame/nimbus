@@ -37,10 +37,10 @@ const RecordType = enum(u8) {
 
 /// Types of WAL log operations (stored in payload for recovery)
 const LogOpType = enum(u8) {
-    put_vertex = 1,
-    delete_vertex = 2,
-    put_edge = 3,
-    delete_edge = 4,
+    put_vertex = 0,
+    delete_vertex = 1,
+    put_edge = 2,
+    delete_edge = 3,
 };
 
 /// WAL record header
@@ -162,7 +162,7 @@ const WalRecord = struct {
         std.mem.writeInt(u64, buf[13..21], self.timestamp, .little);
 
         // Write payload
-        @memmove(buf[header_size .. header_size + self.payload.len], self.payload);
+        @memcpy(buf[header_size .. header_size + self.payload.len], self.payload);
 
         // Write checksum
         std.mem.writeInt(u32, buf[header_size + self.payload.len .. total_size], self.checksum, .little);
@@ -374,7 +374,7 @@ const WalManager = struct {
         // Write vertex_id len and data
         std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(vertex_len), .little);
         pos += @sizeOf(u32);
-        @memmove(buf[pos..][0..vertex_len], vertex_id);
+        @memcpy(buf[pos..][0..vertex_len], vertex_id);
         pos += vertex_len;
 
         // Write properties len
@@ -382,7 +382,7 @@ const WalManager = struct {
         std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(props_len), .little);
         pos += @sizeOf(u32);
         if (properties) |props| {
-            @memmove(buf[pos..][0..props_len], props);
+            @memcpy(buf[pos..][0..props_len], props);
             pos += props_len;
         }
         std.debug.assert(pos == total_len);
@@ -407,7 +407,7 @@ const WalManager = struct {
         const vertex_len = vertex_id.len;
         std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(vertex_len), .little);
         pos += @sizeOf(u32);
-        @memmove(buf[pos..][0..vertex_len], vertex_id);
+        @memcpy(buf[pos..][0..vertex_len], vertex_id);
         pos += vertex_len;
         std.debug.assert(pos == total_len);
 
@@ -439,7 +439,7 @@ const WalManager = struct {
         const src_len = src.len;
         std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(src_len), .little);
         pos += @sizeOf(32);
-        @memmove(buf[pos..][0..src_len], src);
+        @memcpy(buf[pos..][0..src_len], src);
         pos += src_len;
 
         // Write dir
@@ -450,14 +450,14 @@ const WalManager = struct {
         const label_len = label.len;
         std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(label_len), .little);
         pos += @sizeOf(u32);
-        @memmove(buf[pos..][0..label_len], label);
+        @memcpy(buf[pos..][0..label_len], label);
         pos += label_len;
 
         // Write dst len and data
         const dst_len = dst.len;
         std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(dst_len), .little);
         pos += @sizeOf(u32);
-        @memmove(buf[pos..][0..dst_len], dst);
+        @memcpy(buf[pos..][0..dst_len], dst);
         pos += dst_len;
 
         // Write properties len
@@ -465,7 +465,7 @@ const WalManager = struct {
         std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(props_len), .little);
         pos += @sizeOf(u32);
         if (properties) |props| {
-            @memmove(buf[pos..][0..props_len], props);
+            @memcpy(buf[pos..][0..props_len], props);
             pos += props_len;
         }
         std.debug.assert(pos == total_len);
@@ -496,7 +496,7 @@ const WalManager = struct {
         const src_len = src.len;
         std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(src_len), .little);
         pos += @sizeOf(32);
-        @memmove(buf[pos..][0..src_len], src);
+        @memcpy(buf[pos..][0..src_len], src);
         pos += src_len;
 
         // Write dir
@@ -507,18 +507,104 @@ const WalManager = struct {
         const label_len = label.len;
         std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(label_len), .little);
         pos += @sizeOf(u32);
-        @memmove(buf[pos..][0..label_len], label);
+        @memcpy(buf[pos..][0..label_len], label);
         pos += label_len;
 
         // Write dst len and data
         const dst_len = dst.len;
         std.mem.writeInt(u32, buf[pos..][0..@sizeOf(u32)], @intCast(dst_len), .little);
         pos += @sizeOf(u32);
-        @memmove(buf[pos..][0..dst_len], dst);
+        @memcpy(buf[pos..][0..dst_len], dst);
         pos += dst_len;
 
         std.debug.assert(pos == total_len);
 
         return self.writer.append(.full, buf);
+    }
+
+    fn applyRecord(memgraph: anytype, record: WalRecord) !void {
+        if (record.payload.len == 0) {
+            return error.InvalidRecord;
+        }
+
+        const op_type: LogOpType = @enumFromInt(record.payload[0]);
+        var pos: usize = 1;
+        switch (op_type) {
+            .put_vertex => {
+                const vertex_id_len = std.mem.readInt(u32, record.payload[pos..][0..@sizeOf(u32)], .little);
+                pos += @sizeOf(u32);
+                const vertex_id = record.payload[pos..][0..vertex_id_len];
+                pos += vertex_id_len;
+
+                const props_len = std.mem.readInt(u32, record.payload[pos..][0..@sizeOf(u32)], .little);
+                pos += @sizeOf(u32);
+                var properties: ?[]const u8 = null;
+                if (props_len > 0) {
+                    properties = record.payload[pos..][0..props_len];
+                    pos += props_len;
+                }
+
+                try memgraph.putVertex(vertex_id, properties);
+            },
+            .delete_vertex => {
+                const vertex_id_len = std.mem.readInt(u32, record.payload[pos..][0..@sizeOf(u32)], .little);
+                pos += @sizeOf(u32);
+                const vertex_id = record.payload[pos..][0..vertex_id_len];
+                pos += vertex_id_len;
+
+                try memgraph.deleteVertex(vertex_id);
+            },
+            .put_edge => {
+                const src_len = std.mem.readInt(u32, record.payload[pos..][0..@sizeOf(u32)], .little);
+                pos += @sizeOf(u32);
+                const src = record.payload[pos..][0..src_len];
+                pos += src_len;
+
+                const dir: Dir = @enumFromInt(record.payload[pos]);
+                pos += 1;
+
+                const label_len = std.mem.readInt(u32, record.payload[pos..][0..@sizeOf(u32)], .little);
+                pos += @sizeOf(u32);
+                const label = record.payload[pos..][0..label_len];
+                pos += label_len;
+
+                const dst_len = std.mem.readInt(u32, record.payload[pos..][0..@sizeOf(u32)], .little);
+                pos += @sizeOf(u32);
+                const dst = record.payload[pos..][0..dst_len];
+                pos += dst_len;
+
+                const props_len = std.mem.readInt(u32, record.payload[pos..][0..@sizeOf(u32)], .little);
+                pos += @sizeOf(u32);
+                var properties: ?[]const u8 = null;
+                if (props_len > 0) {
+                    properties = record.payload[pos..][0..props_len];
+                    pos += props_len;
+                }
+
+                try memgraph.putEdge(src, dir, label, dst, properties);
+            },
+            .delete_edge => {
+                const src_len = std.mem.readInt(u32, record.payload[pos..][0..@sizeOf(u32)], .little);
+                pos += @sizeOf(u32);
+                const src = record.payload[pos..][0..src_len];
+                pos += src_len;
+
+                const dir: Dir = @enumFromInt(record.payload[pos]);
+                pos += 1;
+
+                const label_len = std.mem.readInt(u32, record.payload[pos..][0..@sizeOf(u32)], .little);
+                pos += @sizeOf(u32);
+                const label = record.payload[pos..][0..label_len];
+                pos += label_len;
+
+                const dst_len = std.mem.readInt(u32, record.payload[pos..][0..@sizeOf(u32)], .little);
+                pos += @sizeOf(u32);
+                const dst = record.payload[pos..][0..dst_len];
+                pos += dst_len;
+
+                try memgraph.deleteEdge(src, dir, label, dst);
+            },
+            else => return error.UnknownOperation,
+        }
     }
 };
